@@ -2,20 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_manager.dart';
-import 'screens/login_screen.dart';
-import 'services/api_service.dart';
-void main() async {
+import 'screens/splash_screen.dart';
+
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
-  final api = ApiService.instance;
-  await api.loadSavedConfig();
   runApp(const AuraLinkApp());
 }
+
 class AuraLinkApp extends StatefulWidget {
   const AuraLinkApp({super.key});
+
   @override
   State<AuraLinkApp> createState() => _AuraLinkAppState();
 }
+
 class _AuraLinkAppState extends State<AuraLinkApp> {
   @override
   void initState() {
@@ -24,6 +25,7 @@ class _AuraLinkAppState extends State<AuraLinkApp> {
       if (mounted) setState(() {});
     });
   }
+
   @override
   Widget build(BuildContext context) {
     final themeManager = ThemeManager.instance;
@@ -44,7 +46,7 @@ class _AuraLinkAppState extends State<AuraLinkApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeManager.themeMode,
-      home: const LoginScreen(),
+      home: const SplashScreen(),
     );
   }
 }

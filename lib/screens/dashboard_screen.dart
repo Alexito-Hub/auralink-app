@@ -6,6 +6,7 @@ import '../services/wol_service.dart';
 import '../services/terminal_messenger.dart';
 import '../core/theme/theme_manager.dart';
 import '../core/theme/app_colors.dart';
+import 'login_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -21,18 +22,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _volume = 0;
   double _brightness = 0;
   Timer? _refreshTimer;
+  final ScrollController _scrollController = ScrollController();
+  bool _isScrolled = false;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
     _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) => _fetchData());
+    _scrollController.addListener(() {
+      if (_scrollController.offset > 20 && !_isScrolled) {
+        setState(() => _isScrolled = true);
+      } else if (_scrollController.offset <= 20 && _isScrolled) {
+        setState(() => _isScrolled = false);
+      }
+    });
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _logout() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   Future<void> _fetchData() async {
@@ -80,59 +99,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final lidClosed = _sysInfo?['lid_closed'] ?? false;
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('>_ auralink_control', style: TextStyle(fontFamily: 'monospace', fontSize: 14, color: syntaxColor)),
-            if (isLaptop)
-              const Text('DEVICE_TYPE: LAPTOP', style: TextStyle(fontSize: 9, color: AppColors.comment, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        backgroundColor: Colors.transparent,
+        title: Text('>_ auralink', 
+          style: TextStyle(fontFamily: 'monospace', fontSize: 16, color: syntaxColor, fontWeight: FontWeight.bold)),
+        backgroundColor: _isScrolled 
+          ? theme.colorScheme.surface.withValues(alpha: 0.95) 
+          : Colors.transparent,
+        elevation: _isScrolled ? 4 : 0,
+        scrolledUnderElevation: 0,
         actions: [
           IconButton(
-            icon: Icon(themeManager.isDarkMode ? Icons.light_mode : Icons.dark_mode, size: 20),
+            icon: Icon(themeManager.isDarkMode ? Icons.light_mode : Icons.dark_mode, size: 18),
             onPressed: () => themeManager.toggleTheme(!themeManager.isDarkMode),
           ),
           IconButton(onPressed: () {
             setState(() => _isLoading = true);
             _fetchData();
-          }, icon: const Icon(Icons.refresh, size: 20)),
-          IconButton(onPressed: () => Navigator.pop(context), icon: const Icon(Icons.logout, size: 20)),
+          }, icon: const Icon(Icons.refresh, size: 18)),
+          IconButton(onPressed: _logout, icon: const Icon(Icons.logout, size: 18)),
         ],
       ),
       body: _isLoading 
         ? const Center(child: TerminalLoading())
         : _isOffline 
           ? _buildOfflineView(theme)
-          : Column(
+          : ListView(
+              controller: _scrollController,
+              padding: const EdgeInsets.fromLTRB(20, 90, 20, 20),
               children: [
-                if (lidClosed) _buildLidWarning(theme),
-                Expanded(
-                  child: ListView(
-                    padding: const EdgeInsets.all(20),
-                    children: [
-                      _buildSectionTitle(theme, 'SYSTEM_RESOURCES'),
-                      _buildSystemGrid(theme),
-                      const SizedBox(height: 30),
-                      _buildSectionTitle(theme, 'BOOT_SELECT'),
-                      _buildBootSelection(theme),
-                      const SizedBox(height: 30),
-                      _buildSectionTitle(theme, 'AUDIO_CONFIG'),
-                      _buildVolumeControl(theme),
-                      const SizedBox(height: 20),
-                      _buildSectionTitle(theme, 'DISPLAY_CONFIG'),
-                      _buildBrightnessControl(theme),
-                      const SizedBox(height: 30),
-                      _buildPowerActions(theme),
-                      const SizedBox(height: 20),
-                      const Text('kernel-daemon v1.0.0', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: AppColors.comment)),
-                    ],
-                  ),
-                ),
+                if (lidClosed) ...[
+                  _buildLidWarning(theme),
+                  const SizedBox(height: 10),
+                ],
+                _buildSectionTitle(theme, 'DEVICE_INFO'),
+                const SizedBox(height: 10),
+                _buildDeviceInfo(theme, isLaptop),
+                const SizedBox(height: 25),
+                _buildSectionTitle(theme, 'SYSTEM_RESOURCES'),
+                const SizedBox(height: 10),
+                _buildSystemGrid(theme),
+                const SizedBox(height: 25),
+                _buildSectionTitle(theme, 'BOOT_SELECT'),
+                const SizedBox(height: 10),
+                _buildBootSelection(theme),
+                const SizedBox(height: 25),
+                _buildSectionTitle(theme, 'AUDIO_CONFIG'),
+                const SizedBox(height: 10),
+                _buildVolumeControl(theme),
+                const SizedBox(height: 20),
+                _buildSectionTitle(theme, 'DISPLAY_CONFIG'),
+                const SizedBox(height: 10),
+                _buildBrightnessControl(theme),
+                const SizedBox(height: 30),
+                _buildPowerActions(theme),
+                const SizedBox(height: 30),
+                const Text('kernel-daemon v1.2.0', textAlign: TextAlign.center, style: TextStyle(fontSize: 10, color: AppColors.comment)),
               ],
             ),
+    );
+  }
+
+  Widget _buildDeviceInfo(ThemeData theme, bool isLaptop) {
+    final os = _sysInfo?['os'] ?? 'unknown';
+    final mac = _sysInfo?['mac'] ?? '00:00:00:00:00:00';
+    final uptime = _sysInfo?['uptime_seconds'] ?? 0;
+    
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
+      ),
+      child: Column(
+        children: [
+          _infoRow('SYSTEM_OS', os.toString().toUpperCase(), icon: os == 'windows' ? Icons.window : Icons.terminal),
+          const Divider(height: 15, thickness: 0.5),
+          _infoRow('HARDWARE', isLaptop ? 'LAPTOP_UNIT' : 'DESKTOP_UNIT', icon: isLaptop ? Icons.laptop : Icons.desktop_windows),
+          const Divider(height: 15, thickness: 0.5),
+          _infoRow('NETWORK_MAC', mac, icon: Icons.lan),
+          const Divider(height: 15, thickness: 0.5),
+          _infoRow('UPTIME', '${(uptime / 3600).floor()}h ${((uptime % 3600) / 60).floor()}m', icon: Icons.timer_outlined),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoRow(String label, String value, {IconData? icon}) {
+    return Row(
+      children: [
+        if (icon != null) Icon(icon, size: 14, color: AppColors.comment),
+        if (icon != null) const SizedBox(width: 10),
+        Text(label, style: const TextStyle(fontSize: 10, color: AppColors.comment, fontWeight: FontWeight.bold)),
+        const Spacer(),
+        Text(value, style: const TextStyle(fontSize: 11, fontFamily: 'monospace', fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
@@ -227,24 +289,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildSectionTitle(ThemeData theme, String title) {
     bool lidClosed = _sysInfo?['lid_closed'] ?? false;
     String os = _sysInfo?['os'] ?? 'unknown';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
-      child: Row(
-        children: [
-          Text('[ ', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 13)),
-          Text(' ]', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
-          if (title == 'SYSTEM_RESOURCES') ...[
-            const SizedBox(width: 10),
-            Icon(os == 'windows' ? Icons.window : Icons.terminal, size: 14, color: AppColors.comment),
-            if (lidClosed) ...[
-              const SizedBox(width: 5),
-              const Icon(Icons.laptop, size: 14, color: AppColors.error),
-            ],
+    return Row(
+      children: [
+        Text('[ ', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2, fontSize: 13)),
+        Text(' ]', style: TextStyle(color: theme.colorScheme.primary, fontWeight: FontWeight.bold)),
+        if (title == 'SYSTEM_RESOURCES') ...[
+          const SizedBox(width: 10),
+          Icon(os == 'windows' ? Icons.window : Icons.terminal, size: 14, color: AppColors.comment),
+          if (lidClosed) ...[
+            const SizedBox(width: 5),
+            const Icon(Icons.laptop, size: 14, color: AppColors.error),
           ],
-          const Expanded(child: Divider(indent: 10, thickness: 0.5)),
         ],
-      ),
+        const Expanded(child: Divider(indent: 10, thickness: 0.5, height: 1)),
+      ],
     );
   }
 
@@ -255,8 +314,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final temp = _sysInfo?['temps']?['cpu'] ?? 0;
     return GridView.count(
       crossAxisCount: 2, shrinkWrap: true,
+      padding: EdgeInsets.zero,
       physics: const NeverScrollableScrollPhysics(),
-      mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 1.8,
+      mainAxisSpacing: 10, crossAxisSpacing: 10, childAspectRatio: 2.2,
       children: [
         _statCard(theme, 'CPU', '$cpu%', cpu / 100, AppColors.function),
         _statCard(theme, 'RAM', '$ram%', ram / 100, AppColors.keyword),

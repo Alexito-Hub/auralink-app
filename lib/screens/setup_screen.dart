@@ -101,12 +101,11 @@ class _SetupScreenState extends State<SetupScreen> {
           TextButton(
               onPressed: () async {
                 await ApiService.instance.resetApp();
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  Navigator.pop(context);
-                  TerminalMessenger.show(context, 'APP_CONFIG_CLEARED',
-                      isSuccess: true);
-                }
+                if (!context.mounted) return;
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+                TerminalMessenger.show(context, 'APP_CONFIG_CLEARED',
+                    isSuccess: true);
               },
               child: const Text('RESET',
                   style: TextStyle(color: Colors.redAccent))),

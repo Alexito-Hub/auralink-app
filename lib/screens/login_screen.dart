@@ -25,7 +25,6 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _checkServerStatus();
-    // Auto-focus para recibir eventos de teclado de inmediato
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _focusNode.requestFocus();
     });
@@ -53,7 +52,7 @@ class _LoginScreenState extends State<LoginScreen> {
       HapticFeedback.lightImpact();
       setState(() => _pin += n.toString());
       if (_pin.length == 4) {
-        Future.delayed(const Duration(milliseconds: 300), _attemptLogin);
+        _attemptLogin();
       }
     }
   }
@@ -99,12 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _attemptLogin() async {
-    if (_pin.length < 4) {
-      TerminalMessenger.show(context, 'ERR: PIN_TOO_SHORT (min 4)',
-          isError: true);
-      return;
-    }
-    if (_isLoading) return;
+    if (_pin.length < 4 || _isLoading) return;
 
     setState(() => _isLoading = true);
     final result = await ApiService.instance.login(_pin);
@@ -134,7 +128,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
 
-    // Asegurarse de que el foco se mantenga al tocar cualquier parte de la pantalla
     return GestureDetector(
       onTap: () => _focusNode.requestFocus(),
       child: KeyboardListener(
@@ -142,57 +135,59 @@ class _LoginScreenState extends State<LoginScreen> {
         onKeyEvent: _handleKeyEvent,
         child: Scaffold(
           body: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Spacer(),
-                  const Text('AUTH_REQUIRED',
-                      style: TextStyle(
-                          color: AppColors.keyword,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12)),
-                  const SizedBox(height: 10),
-                  Text('auralink_control login',
-                      style: theme.textTheme.headlineMedium),
-                  if (_isOffline && _savedMac != null) ...[
-                    const SizedBox(height: 20),
-                    TerminalMessenger.inlineBanner('SERVER_OFFLINE',
-                        'Daemon unreachable at ${_ipControllerText()}'),
-                  ],
-                  const SizedBox(height: 40),
-                  _buildPinDisplay(colorScheme),
-                  const SizedBox(height: 50),
-                  _buildKeypad(theme),
-                  const Spacer(),
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: [
-                      TextButton.icon(
-                        onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) => const SetupScreen())),
-                        icon: const Icon(Icons.settings_ethernet, size: 16),
-                        label: const Text('configure_network()',
-                            style: TextStyle(fontSize: 12)),
-                      ),
-                      if (_savedMac != null)
-                        TextButton.icon(
-                          onPressed: _isLoading ? null : _sendWol,
-                          icon: const Icon(Icons.power_settings_new,
-                              size: 16, color: Colors.orange),
-                          label: const Text('wake_on_lan()',
-                              style: TextStyle(
-                                  fontSize: 12, color: Colors.orange)),
-                        ),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 20),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('AUTH_REQUIRED',
+                        style: TextStyle(
+                            color: AppColors.keyword,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11)),
+                    const SizedBox(height: 8),
+                    Text('auralink_control login',
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                    if (_isOffline && _savedMac != null) ...[
+                      const SizedBox(height: 15),
+                      TerminalMessenger.inlineBanner('SERVER_OFFLINE',
+                          'Daemon unreachable at ${_ipControllerText()}'),
                     ],
-                  ),
-                  const SizedBox(height: 10),
-                ],
+                    const SizedBox(height: 30),
+                    _buildPinDisplay(colorScheme),
+                    const SizedBox(height: 40),
+                    _buildKeypad(theme),
+                    const SizedBox(height: 30),
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 15,
+                      runSpacing: 10,
+                      children: [
+                        TextButton.icon(
+                          onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const SetupScreen())),
+                          icon: const Icon(Icons.settings_ethernet, size: 14),
+                          label: const Text('configure_network()',
+                              style: TextStyle(fontSize: 11)),
+                        ),
+                        if (_savedMac != null)
+                          TextButton.icon(
+                            onPressed: _isLoading ? null : _sendWol,
+                            icon: const Icon(Icons.power_settings_new,
+                                size: 14, color: Colors.orange),
+                            label: const Text('wake_on_lan()',
+                                style: TextStyle(
+                                    fontSize: 11, color: Colors.orange)),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -207,9 +202,9 @@ class _LoginScreenState extends State<LoginScreen> {
       children: List.generate(4, (index) {
         bool filled = index < _pin.length;
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 10),
-          width: 14,
-          height: 14,
+          margin: const EdgeInsets.symmetric(horizontal: 8),
+          width: 12,
+          height: 12,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
             border: Border.all(
@@ -248,26 +243,14 @@ class _LoginScreenState extends State<LoginScreen> {
             _keyBtn(theme, 'BACK', _onDelete, isSmall: true),
           ],
         ),
-        const SizedBox(height: 20),
-        SizedBox(
-          width: 220,
-          child: OutlinedButton(
-            onPressed: _isLoading ? null : _attemptLogin,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 15),
-              side: BorderSide(
-                  color: theme.colorScheme.primary.withValues(alpha: 0.5)),
-            ),
-            child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('SUBMIT_CREDENTIALS()',
-                    style:
-                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          ),
-        )
+        if (_isLoading)
+          const Padding(
+            padding: EdgeInsets.only(top: 20),
+            child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+          )
       ],
     );
   }
