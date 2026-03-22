@@ -72,7 +72,8 @@ class _LoginScreenState extends State<LoginScreen> {
         _onDelete();
       } else if (key == LogicalKeyboardKey.escape) {
         setState(() => _pin = '');
-      } else if (key.keyLabel.length == 1 && RegExp(r'[0-9]').hasMatch(key.keyLabel)) {
+      } else if (key.keyLabel.length == 1 &&
+          RegExp(r'[0-9]').hasMatch(key.keyLabel)) {
         _onNumberTap(int.parse(key.keyLabel));
       } else if (key == LogicalKeyboardKey.enter && _pin.length == 4) {
         _attemptLogin();
@@ -85,10 +86,10 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
     final result = await WolService.sendMagicPacket(_savedMac!);
     setState(() => _isLoading = false);
-    
+
     if (mounted) {
       TerminalMessenger.show(
-        context, 
+        context,
         result.success ? 'MAGIC_PACKET_SENT' : 'WOL_FAILED: ${result.message}',
         isSuccess: result.success,
         isError: !result.success,
@@ -99,26 +100,27 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _attemptLogin() async {
     if (_pin.length < 4) {
-      TerminalMessenger.show(context, 'ERR: PIN_TOO_SHORT (min 4)', isError: true);
+      TerminalMessenger.show(context, 'ERR: PIN_TOO_SHORT (min 4)',
+          isError: true);
       return;
     }
     if (_isLoading) return;
 
     setState(() => _isLoading = true);
     final result = await ApiService.instance.login(_pin);
-    
+
     if (mounted) {
       setState(() => _isLoading = false);
       if (result.success) {
-        Navigator.pushReplacement(
-          context, MaterialPageRoute(builder: (_) => const DashboardScreen()));
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => const DashboardScreen()));
       } else {
         HapticFeedback.vibrate();
         String errorMsg = result.message ?? 'UNKNOWN_ERROR';
         if (result.statusCode == 429) {
           errorMsg = 'TEMPORARY_LOCKOUT: $errorMsg';
         }
-        
+
         TerminalMessenger.show(context, errorMsg, isError: true);
         setState(() => _pin = '');
       }
@@ -146,14 +148,19 @@ class _LoginScreenState extends State<LoginScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   const Spacer(),
-                  const Text('AUTH_REQUIRED', style: TextStyle(color: AppColors.keyword, fontWeight: FontWeight.bold, fontSize: 12)),
+                  const Text('AUTH_REQUIRED',
+                      style: TextStyle(
+                          color: AppColors.keyword,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12)),
                   const SizedBox(height: 10),
-                  Text('auralink_control login', style: theme.textTheme.headlineMedium),
+                  Text('auralink_control login',
+                      style: theme.textTheme.headlineMedium),
                   if (_isOffline && _savedMac != null) ...[
                     const SizedBox(height: 20),
-                    TerminalMessenger.inlineBanner('SERVER_OFFLINE', 'Daemon unreachable at ${_ipControllerText()}'),
+                    TerminalMessenger.inlineBanner('SERVER_OFFLINE',
+                        'Daemon unreachable at ${_ipControllerText()}'),
                   ],
-
                   const SizedBox(height: 40),
                   _buildPinDisplay(colorScheme),
                   const SizedBox(height: 50),
@@ -165,15 +172,22 @@ class _LoginScreenState extends State<LoginScreen> {
                     runSpacing: 10,
                     children: [
                       TextButton.icon(
-                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SetupScreen())),
+                        onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const SetupScreen())),
                         icon: const Icon(Icons.settings_ethernet, size: 16),
-                        label: const Text('configure_network()', style: TextStyle(fontSize: 12)),
+                        label: const Text('configure_network()',
+                            style: TextStyle(fontSize: 12)),
                       ),
                       if (_savedMac != null)
                         TextButton.icon(
                           onPressed: _isLoading ? null : _sendWol,
-                          icon: const Icon(Icons.power_settings_new, size: 16, color: Colors.orange),
-                          label: const Text('wake_on_lan()', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                          icon: const Icon(Icons.power_settings_new,
+                              size: 16, color: Colors.orange),
+                          label: const Text('wake_on_lan()',
+                              style: TextStyle(
+                                  fontSize: 12, color: Colors.orange)),
                         ),
                     ],
                   ),
@@ -187,24 +201,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildWolBanner(ThemeData theme) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.orange.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
-          const SizedBox(width: 8),
-          Text('SERVER_OFFLINE', style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
   Widget _buildPinDisplay(ColorScheme colorScheme) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -216,25 +212,38 @@ class _LoginScreenState extends State<LoginScreen> {
           height: 14,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(2),
-            border: Border.all(color: filled ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.2)),
-            color: filled ? colorScheme.primary.withValues(alpha: 0.5) : Colors.transparent,
+            border: Border.all(
+                color: filled
+                    ? colorScheme.primary
+                    : colorScheme.onSurface.withValues(alpha: 0.2)),
+            color: filled
+                ? colorScheme.primary.withValues(alpha: 0.5)
+                : Colors.transparent,
           ),
         );
       }),
     );
   }
+
   Widget _buildKeypad(ThemeData theme) {
     return Column(
       children: [
-        for (var row in [[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        for (var row in [
+          [1, 2, 3],
+          [4, 5, 6],
+          [7, 8, 9]
+        ])
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: row.map((n) => _keyBtn(theme, '[$n]', () => _onNumberTap(n))).toList(),
+            children: row
+                .map((n) => _keyBtn(theme, '[$n]', () => _onNumberTap(n)))
+                .toList(),
           ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
           children: [
-            _keyBtn(theme, 'CLR', () => setState(() => _pin = ''), isSmall: true),
+            _keyBtn(theme, 'CLR', () => setState(() => _pin = ''),
+                isSmall: true),
             _keyBtn(theme, '[0]', () => _onNumberTap(0)),
             _keyBtn(theme, 'BACK', _onDelete, isSmall: true),
           ],
@@ -246,17 +255,25 @@ class _LoginScreenState extends State<LoginScreen> {
             onPressed: _isLoading ? null : _attemptLogin,
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 15),
-              side: BorderSide(color: theme.colorScheme.primary.withValues(alpha: 0.5)),
+              side: BorderSide(
+                  color: theme.colorScheme.primary.withValues(alpha: 0.5)),
             ),
-            child: _isLoading 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : const Text('SUBMIT_CREDENTIALS()', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2))
+                : const Text('SUBMIT_CREDENTIALS()',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
           ),
         )
       ],
     );
   }
-  Widget _keyBtn(ThemeData theme, String text, VoidCallback onTap, {bool isSmall = false}) {
+
+  Widget _keyBtn(ThemeData theme, String text, VoidCallback onTap,
+      {bool isSmall = false}) {
     return Padding(
       padding: const EdgeInsets.all(8),
       child: InkWell(
@@ -266,14 +283,15 @@ class _LoginScreenState extends State<LoginScreen> {
           height: 60,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            border: Border.all(color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
+            border: Border.all(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.05)),
             borderRadius: BorderRadius.circular(4),
           ),
-          child: Text(text, style: TextStyle(
-            fontSize: isSmall ? 12 : 18, 
-            color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
-            fontWeight: FontWeight.bold
-          )),
+          child: Text(text,
+              style: TextStyle(
+                  fontSize: isSmall ? 12 : 18,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                  fontWeight: FontWeight.bold)),
         ),
       ),
     );

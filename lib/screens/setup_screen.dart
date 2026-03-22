@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/wol_service.dart';
 import '../services/terminal_messenger.dart';
-import '../core/theme/app_colors.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
@@ -43,7 +42,7 @@ class _SetupScreenState extends State<SetupScreen> {
     setState(() => _isTesting = false);
     if (mounted) {
       TerminalMessenger.show(
-        context, 
+        context,
         reachable ? 'CONNECTION_SUCCESS' : 'CONNECTION_FAILED',
         isSuccess: reachable,
         isError: !reachable,
@@ -68,15 +67,18 @@ class _SetupScreenState extends State<SetupScreen> {
           const SizedBox(height: 40),
           OutlinedButton(
             onPressed: _isTesting ? null : _save,
-            child: _isTesting 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) 
-              : const Text('apply_changes()'),
+            child: _isTesting
+                ? const SizedBox(
+                    width: 20, height: 20, child: CircularProgressIndicator())
+                : const Text('apply_changes()'),
           ),
           const SizedBox(height: 20),
           TextButton.icon(
             onPressed: () => _confirmReset(context),
-            icon: const Icon(Icons.delete_forever, size: 16, color: Colors.redAccent),
-            label: const Text('factory_reset()', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+            icon: const Icon(Icons.delete_forever,
+                size: 16, color: Colors.redAccent),
+            label: const Text('factory_reset()',
+                style: TextStyle(color: Colors.redAccent, fontSize: 12)),
           ),
         ],
       ),
@@ -88,31 +90,38 @@ class _SetupScreenState extends State<SetupScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text('RESET_ALL_CONFIG?', style: TextStyle(color: Colors.white, fontFamily: 'monospace')),
-        content: const Text('This will delete all saved IP, Port and Device IDs from this app.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+        title: const Text('RESET_ALL_CONFIG?',
+            style: TextStyle(color: Colors.white, fontFamily: 'monospace')),
+        content: const Text(
+            'This will delete all saved IP, Port and Device IDs from this app.',
+            style: TextStyle(color: Colors.white70, fontSize: 13)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
           TextButton(
-            onPressed: () async {
-              await ApiService.instance.resetApp();
-              if (mounted) {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-                TerminalMessenger.show(context, 'APP_CONFIG_CLEARED', isSuccess: true);
-              }
-            }, 
-            child: const Text('RESET', style: TextStyle(color: Colors.redAccent))
-          ),
+              onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+              onPressed: () async {
+                await ApiService.instance.resetApp();
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  Navigator.pop(context);
+                  TerminalMessenger.show(context, 'APP_CONFIG_CLEARED',
+                      isSuccess: true);
+                }
+              },
+              child: const Text('RESET',
+                  style: TextStyle(color: Colors.redAccent))),
         ],
       ),
     );
   }
 
-  Widget _buildField(ThemeData theme, String label, TextEditingController controller, String hint) {
+  Widget _buildField(ThemeData theme, String label,
+      TextEditingController controller, String hint) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+        Text(label,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         TextField(
           controller: controller,
