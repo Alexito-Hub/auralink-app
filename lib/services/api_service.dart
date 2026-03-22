@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -13,6 +14,19 @@ class ApiService {
   String? _token;
   String? _ip;
   String? _port;
+  String? _deviceId;
+
+  Future<void> _ensureDeviceId() async {
+    if (_deviceId != null) return;
+    _deviceId = await _storage.read(key: 'device_id');
+    if (_deviceId == null) {
+      final rand = Random();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final randomPart = List.generate(8, (_) => rand.nextInt(16).toRadixString(16)).join();
+      _deviceId = 'aura-$timestamp-$randomPart';
+      await _storage.write(key: 'device_id', value: _deviceId);
+    }
+  }
 
   Future<void> configure(String ip, int port) async {
     _ip = ip;
@@ -20,11 +34,13 @@ class ApiService {
     _baseUrl = 'https://$ip:$port';
     await _storage.write(key: 'server_ip', value: ip);
     await _storage.write(key: 'server_port', value: port.toString());
+    await _ensureDeviceId();
   }
 
   Future<bool> loadSavedConfig() async {
     _ip = await _storage.read(key: 'server_ip');
     _port = await _storage.read(key: 'server_port');
+    await _ensureDeviceId();
     if (_ip != null && _port != null) {
       _baseUrl = 'https://$_ip:$_port';
       _token = await _storage.read(key: 'jwt_token');
@@ -35,6 +51,7 @@ class ApiService {
 
   String? get ip => _ip;
   String? get port => _port;
+  String? get deviceId => _deviceId;
 
   http.Client _buildClient() {
     final client = HttpClient()
@@ -45,13 +62,13 @@ class ApiService {
   Future<LoginResult> login(String pin) async {
     try {
       final client = _buildClient();
-      final deviceMac = await _storage.read(key: 'pc_mac') ?? 'mobile-app';
+      await _ensureDeviceId();
       final response = await client.post(
         Uri.parse('$_baseUrl/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'pin': pin,
-          'mac': deviceMac,
+          'mac': _deviceId,
         }),
       ).timeout(const Duration(seconds: 10));
 
@@ -60,7 +77,6 @@ class ApiService {
         _token = data['token'];
         await _storage.write(key: 'jwt_token', value: _token);
         
-        // Intentar obtener la MAC automáticamente después del login exitoso
         try {
           final infoRes = await get('/system/info');
           if (infoRes.success && infoRes.data['mac'] != null) {
@@ -153,6 +169,15 @@ class ApiService {
   Future<void> logout() async {
     _token = null;
     await _storage.delete(key: 'jwt_token');
+  }
+
+  Future<void> resetApp() async {
+    _token = null;
+    _ip = null;
+    _port = null;
+    _baseUrl = null;
+    _deviceId = null;
+    await _storage.deleteAll();
   }
 }
 

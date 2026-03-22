@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/wol_service.dart';
+import '../services/terminal_messenger.dart';
 import '../core/theme/app_colors.dart';
 
 class SetupScreen extends StatefulWidget {
   const SetupScreen({super.key});
+
   @override
   State<SetupScreen> createState() => _SetupScreenState();
 }
@@ -18,15 +20,14 @@ class _SetupScreenState extends State<SetupScreen> {
   @override
   void initState() {
     super.initState();
-    _loadCurrent();
+    _load();
   }
 
-  void _loadCurrent() async {
+  Future<void> _load() async {
     await ApiService.instance.loadSavedConfig();
     _ipController.text = ApiService.instance.ip ?? '';
     _portController.text = ApiService.instance.port ?? '8443';
-    final mac = await WolService.getSavedMac();
-    if (mac != null) _macController.text = mac;
+    _macController.text = await WolService.getSavedMac() ?? '';
     setState(() {});
   }
 
@@ -41,11 +42,11 @@ class _SetupScreenState extends State<SetupScreen> {
     final reachable = await ApiService.instance.isServerReachable();
     setState(() => _isTesting = false);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(reachable ? 'SUCCESS' : 'ERR'),
-          backgroundColor: reachable ? AppColors.success : AppColors.error,
-        ),
+      TerminalMessenger.show(
+        context, 
+        reachable ? 'CONNECTION_SUCCESS' : 'CONNECTION_FAILED',
+        isSuccess: reachable,
+        isError: !reachable,
       );
       if (reachable) Navigator.pop(context);
     }
@@ -70,6 +71,37 @@ class _SetupScreenState extends State<SetupScreen> {
             child: _isTesting 
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) 
               : const Text('apply_changes()'),
+          ),
+          const SizedBox(height: 20),
+          TextButton.icon(
+            onPressed: () => _confirmReset(context),
+            icon: const Icon(Icons.delete_forever, size: 16, color: Colors.redAccent),
+            label: const Text('factory_reset()', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmReset(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: const Text('RESET_ALL_CONFIG?', style: TextStyle(color: Colors.white, fontFamily: 'monospace')),
+        content: const Text('This will delete all saved IP, Port and Device IDs from this app.', style: TextStyle(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('CANCEL')),
+          TextButton(
+            onPressed: () async {
+              await ApiService.instance.resetApp();
+              if (mounted) {
+                Navigator.pop(ctx);
+                Navigator.pop(context);
+                TerminalMessenger.show(context, 'APP_CONFIG_CLEARED', isSuccess: true);
+              }
+            }, 
+            child: const Text('RESET', style: TextStyle(color: Colors.redAccent))
           ),
         ],
       ),

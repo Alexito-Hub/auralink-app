@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../services/wol_service.dart';
+import '../services/terminal_messenger.dart';
 import '../core/theme/theme_manager.dart';
 import '../core/theme/app_colors.dart';
 
@@ -136,25 +137,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildLidWarning(ThemeData theme) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.error.withValues(alpha: 0.1),
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-      child: Row(
-        children: [
-          const Icon(Icons.warning_amber_rounded, color: AppColors.error, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('LID_STATUS: CLOSED', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold, fontSize: 12)),
-                Text('Open lid to interact', style: TextStyle(color: theme.colorScheme.onSurface.withValues(alpha: 0.7), fontSize: 11)),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+      child: TerminalMessenger.inlineBanner('LID_STATUS: CLOSED', 'Open lid to interact', isError: true),
     );
   }
 
@@ -165,11 +150,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.cloud_off, size: 64, color: AppColors.error),
-            const SizedBox(height: 20),
-            const Text('DAEMON_UNREACHABLE', style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.error)),
-            const SizedBox(height: 10),
-            const Text('System is offline', textAlign: TextAlign.center, style: TextStyle(color: AppColors.comment, fontSize: 12)),
+            TerminalMessenger.inlineBanner('DAEMON_UNREACHABLE', 'System is offline or unreachable', isError: true),
             const SizedBox(height: 40),
             SizedBox(
               width: double.infinity,
@@ -180,8 +161,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   if (mac != null && mac.isNotEmpty) {
                     final result = await WolService.sendMagicPacket(mac);
                     if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(result.message), backgroundColor: result.success ? AppColors.success : AppColors.error),
+                      TerminalMessenger.show(
+                        context, 
+                        result.message,
+                        isSuccess: result.success,
+                        isError: !result.success,
                       );
                     }
                   }
@@ -316,10 +300,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final List<dynamic> entries = bootData['entries'];
     final hasArch = entries.any((e) => e['name'].toString().toLowerCase().contains('arch'));
     final hasWindows = entries.any((e) => e['name'].toString().toLowerCase().contains('windows'));
-    return Wrap(
-      spacing: 10, runSpacing: 10,
+    return Row(
       children: [
         if (hasArch) _bootBtn(theme, 'arch_linux', 'arch', const Color(0xFF1793D1), currentOs == 'arch'),
+        if (hasArch && hasWindows) const SizedBox(width: 10),
         if (hasWindows) _bootBtn(theme, 'windows_11', 'windows', Colors.blueAccent, currentOs == 'windows'),
       ],
     );
@@ -330,12 +314,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: GestureDetector(
         onLongPress: isActive ? null : () async {
           HapticFeedback.heavyImpact();
-          await ApiService.instance.post('/boot/select', {'target': id});
+          final res = await ApiService.instance.post('/boot/select', {'target': id});
+          if (mounted) {
+            TerminalMessenger.show(context, res.success ? 'BOOT_TARGET_SET: $id' : 'ERR: ${res.message}', isSuccess: res.success, isError: !res.success);
+          }
         },
         child: OutlinedButton(
           onPressed: isActive ? null : () async {
             HapticFeedback.mediumImpact();
-            await ApiService.instance.post('/boot/switch', {'target': id});
+            TerminalMessenger.show(context, 'SWITCHING_OS: $id...', isSuccess: true);
+            final res = await ApiService.instance.post('/boot/switch', {'target': id});
+            if (mounted && !res.success) {
+              TerminalMessenger.show(context, 'ERR: ${res.message}', isError: true);
+            }
           },
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: isActive ? AppColors.comment.withValues(alpha: 0.2) : color.withValues(alpha: 0.3)),
@@ -354,6 +345,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Timer? _volumeDebounce;
+  void _setVolume(double v) {
+    setState(() => _volume = v);
+    _volumeDebounce?.cancel();
+    _volumeDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final res = await ApiService.instance.post('/system/volume', {'action': 'set', 'value': v.toInt()});
+      if (!res.success && mounted) {
+        TerminalMessenger.show(context, 'VOL_UPDATE_FAILED: ${res.message}', isError: true);
+      }
+    });
+  }
+
   Widget _buildVolumeControl(ThemeData theme) {
     return Container(
       padding: const EdgeInsets.all(10),
@@ -368,8 +371,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Expanded(
             child: Slider(
               value: _volume, min: 0, max: 100,
-              onChanged: (v) => setState(() => _volume = v),
-              onChangeEnd: (v) => ApiService.instance.post('/system/volume', {'action': 'set', 'value': v.toInt()}),
+              onChanged: _setVolume,
             ),
           ),
           Text('${_volume.toInt()}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
@@ -384,16 +386,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         _actionBtn(theme, 'powerOn', Icons.flash_on, AppColors.string, () async {
           final mac = await WolService.getSavedMac();
-          if (mac != null) await WolService.sendMagicPacket(mac);
+          if (mac != null) {
+            final res = await WolService.sendMagicPacket(mac);
+            if (mounted) TerminalMessenger.show(context, res.message, isSuccess: res.success, isError: !res.success);
+          } else {
+            if (mounted) TerminalMessenger.show(context, 'ERR: NO_MAC_SAVED', isError: true);
+          }
         }),
         _actionBtn(theme, 'sleepMode', Icons.bedtime_outlined, Colors.purpleAccent, () async {
-          await ApiService.instance.post('/system/sleep');
+          final res = await ApiService.instance.post('/system/sleep');
+          if (mounted) TerminalMessenger.show(context, res.success ? 'SYSTEM_SLEEP_CMD_SENT' : 'ERR: ${res.message}', isSuccess: res.success, isError: !res.success);
         }),
         _actionBtn(theme, 'powerOff', Icons.power_settings_new, Colors.redAccent, () async {
-          await ApiService.instance.post('/system/shutdown');
+          final res = await ApiService.instance.post('/system/shutdown');
+          if (mounted) TerminalMessenger.show(context, res.success ? 'SYSTEM_SHUTDOWN_CMD_SENT' : 'ERR: ${res.message}', isSuccess: res.success, isError: !res.success);
         }),
         _actionBtn(theme, 'reboot', Icons.restart_alt, Colors.orangeAccent, () async {
-          await ApiService.instance.post('/system/reboot');
+          final res = await ApiService.instance.post('/system/reboot');
+          if (mounted) TerminalMessenger.show(context, res.success ? 'SYSTEM_REBOOT_CMD_SENT' : 'ERR: ${res.message}', isSuccess: res.success, isError: !res.success);
         }),
       ],
     );

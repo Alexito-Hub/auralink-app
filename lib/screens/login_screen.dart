@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
 import '../services/wol_service.dart';
+import '../services/terminal_messenger.dart';
 import 'dashboard_screen.dart';
 import 'setup_screen.dart';
 import '../core/theme/app_colors.dart';
@@ -18,11 +19,22 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
   bool _isOffline = false;
   String? _savedMac;
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
     super.initState();
     _checkServerStatus();
+    // Auto-focus para recibir eventos de teclado de inmediato
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _focusNode.requestFocus();
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   Future<void> _checkServerStatus() async {
@@ -40,6 +52,9 @@ class _LoginScreenState extends State<LoginScreen> {
     if (_pin.length < 4) {
       HapticFeedback.lightImpact();
       setState(() => _pin += n.toString());
+      if (_pin.length == 4) {
+        Future.delayed(const Duration(milliseconds: 300), _attemptLogin);
+      }
     }
   }
 
@@ -50,6 +65,21 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      final key = event.logicalKey;
+      if (key == LogicalKeyboardKey.backspace) {
+        _onDelete();
+      } else if (key == LogicalKeyboardKey.escape) {
+        setState(() => _pin = '');
+      } else if (key.keyLabel.length == 1 && RegExp(r'[0-9]').hasMatch(key.keyLabel)) {
+        _onNumberTap(int.parse(key.keyLabel));
+      } else if (key == LogicalKeyboardKey.enter && _pin.length == 4) {
+        _attemptLogin();
+      }
+    }
+  }
+
   Future<void> _sendWol() async {
     if (_savedMac == null) return;
     setState(() => _isLoading = true);
@@ -57,92 +87,100 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = false);
     
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.success ? 'MAGIC_PACKET_SENT' : 'WOL_FAILED: ${result.message}'),
-          backgroundColor: result.success ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
-        ),
+      TerminalMessenger.show(
+        context, 
+        result.success ? 'MAGIC_PACKET_SENT' : 'WOL_FAILED: ${result.message}',
+        isSuccess: result.success,
+        isError: !result.success,
       );
-      // Re-check status after a few seconds
       Future.delayed(const Duration(seconds: 5), _checkServerStatus);
     }
   }
 
   Future<void> _attemptLogin() async {
     if (_pin.length < 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('ERR: PIN_TOO_SHORT (min 4)')),
-      );
+      TerminalMessenger.show(context, 'ERR: PIN_TOO_SHORT (min 4)', isError: true);
       return;
     }
+    if (_isLoading) return;
+
     setState(() => _isLoading = true);
     final result = await ApiService.instance.login(_pin);
-    setState(() => _isLoading = false);
-    if (result.success) {
-      if (mounted) {
+    
+    if (mounted) {
+      setState(() => _isLoading = false);
+      if (result.success) {
         Navigator.pushReplacement(
           context, MaterialPageRoute(builder: (_) => const DashboardScreen()));
-      }
-    } else {
-      HapticFeedback.vibrate();
-      setState(() {
-        _pin = '';
-        if (result.message?.contains('socket') == true || result.message?.contains('refused') == true) {
-          _isOffline = true;
+      } else {
+        HapticFeedback.vibrate();
+        String errorMsg = result.message ?? 'UNKNOWN_ERROR';
+        if (result.statusCode == 429) {
+          errorMsg = 'TEMPORARY_LOCKOUT: $errorMsg';
         }
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('ERR: ${result.message}')),
-        );
+        
+        TerminalMessenger.show(context, errorMsg, isError: true);
+        setState(() => _pin = '');
       }
     }
   }
+
+  String _ipControllerText() => ApiService.instance.ip ?? 'UNKNOWN_IP';
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Spacer(),
-              const Text('AUTH_REQUIRED', style: TextStyle(color: AppColors.keyword, fontWeight: FontWeight.bold, fontSize: 12)),
-              const SizedBox(height: 10),
-              Text('auralink_control login', style: theme.textTheme.headlineMedium),
-              if (_isOffline && _savedMac != null) ...[
-                const SizedBox(height: 20),
-                _buildWolBanner(theme),
-              ],
-              const SizedBox(height: 40),
-              _buildPinDisplay(colorScheme),
-              const SizedBox(height: 50),
-              _buildKeypad(theme),
-              const Spacer(),
-              Row(
+
+    // Asegurarse de que el foco se mantenga al tocar cualquier parte de la pantalla
+    return GestureDetector(
+      onTap: () => _focusNode.requestFocus(),
+      child: KeyboardListener(
+        focusNode: _focusNode,
+        onKeyEvent: _handleKeyEvent,
+        child: Scaffold(
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 40.0),
+              child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  TextButton.icon(
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SetupScreen())),
-                    icon: const Icon(Icons.settings_ethernet, size: 16),
-                    label: const Text('configure_network()', style: TextStyle(fontSize: 12)),
-                  ),
-                  if (_savedMac != null) ...[
-                    const SizedBox(width: 10),
-                    TextButton.icon(
-                      onPressed: _isLoading ? null : _sendWol,
-                      icon: const Icon(Icons.power_settings_new, size: 16, color: Colors.orange),
-                      label: const Text('wake_on_lan()', style: TextStyle(fontSize: 12, color: Colors.orange)),
-                    ),
+                  const Spacer(),
+                  const Text('AUTH_REQUIRED', style: TextStyle(color: AppColors.keyword, fontWeight: FontWeight.bold, fontSize: 12)),
+                  const SizedBox(height: 10),
+                  Text('auralink_control login', style: theme.textTheme.headlineMedium),
+                  if (_isOffline && _savedMac != null) ...[
+                    const SizedBox(height: 20),
+                    TerminalMessenger.inlineBanner('SERVER_OFFLINE', 'Daemon unreachable at ${_ipControllerText()}'),
                   ],
+
+                  const SizedBox(height: 40),
+                  _buildPinDisplay(colorScheme),
+                  const SizedBox(height: 50),
+                  _buildKeypad(theme),
+                  const Spacer(),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SetupScreen())),
+                        icon: const Icon(Icons.settings_ethernet, size: 16),
+                        label: const Text('configure_network()', style: TextStyle(fontSize: 12)),
+                      ),
+                      if (_savedMac != null)
+                        TextButton.icon(
+                          onPressed: _isLoading ? null : _sendWol,
+                          icon: const Icon(Icons.power_settings_new, size: 16, color: Colors.orange),
+                          label: const Text('wake_on_lan()', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
                 ],
               ),
-              const SizedBox(height: 10),
-            ],
+            ),
           ),
         ),
       ),
