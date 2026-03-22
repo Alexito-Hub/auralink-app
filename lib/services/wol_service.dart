@@ -29,17 +29,32 @@ class WolService {
           packet[i * 6 + j] = mac[j];
         }
       }
+
+      // Enviar a traves de multiples puertos y direcciones de broadcast comunes
       final socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
       socket.broadcastEnabled = true;
-      for (int i = 0; i < 5; i++) {
-        socket.send(packet, InternetAddress('255.255.255.255'), 9);
-        final serverIp = ApiService.instance.ip;
-        if (serverIp != null && serverIp.contains('.')) {
-          final subnet = serverIp.substring(0, serverIp.lastIndexOf('.'));
-          socket.send(packet, InternetAddress('$subnet.255'), 9);
+      
+      final broadcastAddresses = [
+        InternetAddress('255.255.255.255'),
+      ];
+
+      // Intentar deducir el broadcast de la subred a partir de la IP guardada
+      final serverIp = ApiService.instance.ip;
+      if (serverIp != null && serverIp.contains('.')) {
+        final parts = serverIp.split('.');
+        if (parts.length == 4) {
+          broadcastAddresses.add(InternetAddress('${parts[0]}.${parts[1]}.${parts[2]}.255'));
         }
-        await Future.delayed(const Duration(milliseconds: 100));
       }
+
+      for (var address in broadcastAddresses) {
+        for (int i = 0; i < 3; i++) { // Repetir 3 veces para mayor seguridad
+          socket.send(packet, address, 9); // Puerto WOL estandar
+          socket.send(packet, address, 7); // Puerto WOL alternativo
+          await Future.delayed(const Duration(milliseconds: 50));
+        }
+      }
+      
       socket.close();
       return const WolResult(success: true, message: 'SUCCESS: magic_packet_sent');
     } catch (e) {

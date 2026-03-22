@@ -1,29 +1,73 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/api_service.dart';
+import '../services/wol_service.dart';
 import 'dashboard_screen.dart';
 import 'setup_screen.dart';
 import '../core/theme/app_colors.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
+
 class _LoginScreenState extends State<LoginScreen> {
   String _pin = '';
   bool _isLoading = false;
+  bool _isOffline = false;
+  String? _savedMac;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkServerStatus();
+  }
+
+  Future<void> _checkServerStatus() async {
+    final mac = await WolService.getSavedMac();
+    final isReachable = await ApiService.instance.isServerReachable();
+    if (mounted) {
+      setState(() {
+        _savedMac = mac;
+        _isOffline = !isReachable;
+      });
+    }
+  }
+
   void _onNumberTap(int n) {
     if (_pin.length < 4) {
       HapticFeedback.lightImpact();
       setState(() => _pin += n.toString());
     }
   }
+
   void _onDelete() {
     if (_pin.isNotEmpty) {
       HapticFeedback.lightImpact();
       setState(() => _pin = _pin.substring(0, _pin.length - 1));
     }
   }
+
+  Future<void> _sendWol() async {
+    if (_savedMac == null) return;
+    setState(() => _isLoading = true);
+    final result = await WolService.sendMagicPacket(_savedMac!);
+    setState(() => _isLoading = false);
+    
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result.success ? 'MAGIC_PACKET_SENT' : 'WOL_FAILED: ${result.message}'),
+          backgroundColor: result.success ? Colors.green.withValues(alpha: 0.2) : Colors.red.withValues(alpha: 0.2),
+        ),
+      );
+      // Re-check status after a few seconds
+      Future.delayed(const Duration(seconds: 5), _checkServerStatus);
+    }
+  }
+
   Future<void> _attemptLogin() async {
     if (_pin.length < 4) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -41,7 +85,12 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } else {
       HapticFeedback.vibrate();
-      setState(() => _pin = '');
+      setState(() {
+        _pin = '';
+        if (result.message?.contains('socket') == true || result.message?.contains('refused') == true) {
+          _isOffline = true;
+        }
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('ERR: ${result.message}')),
@@ -49,6 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     }
   }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -64,20 +114,56 @@ class _LoginScreenState extends State<LoginScreen> {
               const Text('AUTH_REQUIRED', style: TextStyle(color: AppColors.keyword, fontWeight: FontWeight.bold, fontSize: 12)),
               const SizedBox(height: 10),
               Text('auralink_control login', style: theme.textTheme.headlineMedium),
+              if (_isOffline && _savedMac != null) ...[
+                const SizedBox(height: 20),
+                _buildWolBanner(theme),
+              ],
               const SizedBox(height: 40),
               _buildPinDisplay(colorScheme),
               const SizedBox(height: 50),
               _buildKeypad(theme),
               const Spacer(),
-              TextButton.icon(
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SetupScreen())),
-                icon: const Icon(Icons.settings_ethernet, size: 16),
-                label: const Text('configure_network()', style: TextStyle(fontSize: 12)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  TextButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SetupScreen())),
+                    icon: const Icon(Icons.settings_ethernet, size: 16),
+                    label: const Text('configure_network()', style: TextStyle(fontSize: 12)),
+                  ),
+                  if (_savedMac != null) ...[
+                    const SizedBox(width: 10),
+                    TextButton.icon(
+                      onPressed: _isLoading ? null : _sendWol,
+                      icon: const Icon(Icons.power_settings_new, size: 16, color: Colors.orange),
+                      label: const Text('wake_on_lan()', style: TextStyle(fontSize: 12, color: Colors.orange)),
+                    ),
+                  ],
+                ],
               ),
               const SizedBox(height: 10),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWolBanner(ThemeData theme) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 16),
+          const SizedBox(width: 8),
+          Text('SERVER_OFFLINE', style: theme.textTheme.bodySmall?.copyWith(color: Colors.orange, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }

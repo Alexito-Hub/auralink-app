@@ -59,6 +59,15 @@ class ApiService {
         final data = jsonDecode(response.body);
         _token = data['token'];
         await _storage.write(key: 'jwt_token', value: _token);
+        
+        // Intentar obtener la MAC automáticamente después del login exitoso
+        try {
+          final infoRes = await get('/system/info');
+          if (infoRes.success && infoRes.data['mac'] != null) {
+            await _storage.write(key: 'pc_mac', value: infoRes.data['mac']);
+          }
+        } catch (_) {}
+
         return const LoginResult(success: true);
       } else {
         final error = jsonDecode(response.body);
