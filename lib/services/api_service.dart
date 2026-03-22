@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
@@ -15,6 +16,47 @@ class ApiService {
   String? _ip;
   String? _port;
   String? _deviceId;
+
+  // Puerto UDP para descubrimiento (debe coincidir con el daemon)
+  static const int discoveryPort = 8444;
+
+  Future<String?> discoverServer() async {
+    RawDatagramSocket? socket;
+    try {
+      socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      socket.broadcastEnabled = true;
+      
+      final data = utf8.encode('AURALINK_DISCOVER');
+      // Enviamos a la dirección de broadcast
+      socket.send(data, InternetAddress('255.255.255.255'), discoveryPort);
+      
+      final completer = Completer<String?>();
+      
+      socket.listen((RawSocketEvent event) {
+        if (event == RawSocketEvent.read) {
+          final datagram = socket!.receive();
+          if (datagram != null) {
+            final message = utf8.decode(datagram.data);
+            if (message.startsWith('AURALINK_HERE:')) {
+              final url = message.substring('AURALINK_HERE:'.length).trim();
+              if (!completer.isCompleted) completer.complete(url);
+            }
+          }
+        }
+      });
+
+      // Timeout tras 3 segundos de búsqueda
+      return await completer.future.timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => null,
+      );
+    } catch (e) {
+      print('Discovery error: $e');
+      return null;
+    } finally {
+      socket?.close();
+    }
+  }
 
   Future<void> _ensureDeviceId() async {
     if (_deviceId != null) return;
