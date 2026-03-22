@@ -97,6 +97,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final syntaxColor = themeManager.isDarkMode ? AppColors.keyword : AppColors.primaryLight;
     final isLaptop = _sysInfo?['battery'] != null;
     final lidClosed = _sysInfo?['lid_closed'] ?? false;
+    final fastStartupWarning = _sysInfo?['fast_startup_warning'] ?? false;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -130,6 +131,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               children: [
                 if (lidClosed) ...[
                   _buildLidWarning(theme),
+                  const SizedBox(height: 10),
+                ],
+                if (fastStartupWarning) ...[
+                  _buildFastStartupWarning(theme),
                   const SizedBox(height: 10),
                 ],
                 _buildSectionTitle(theme, 'DEVICE_INFO'),
@@ -199,13 +204,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildLidWarning(ThemeData theme) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: TerminalMessenger.inlineBanner('LID_STATUS: CLOSED', 'Open lid to interact', isError: true),
+    return TerminalMessenger.inlineBanner('LID_STATUS: CLOSED', 'Open lid to interact', isError: true);
+  }
+
+  Widget _buildFastStartupWarning(ThemeData theme) {
+    return TerminalMessenger.inlineBanner(
+      'FAST_STARTUP: DETECTED', 
+      'AURA Partition may be locked. Disable Fast Startup in Windows.', 
+      isError: true
     );
   }
 
   Widget _buildOfflineView(ThemeData theme) {
+    final isLaptop = _sysInfo?['battery'] != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(40),
@@ -241,6 +252,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
+            if (isLaptop) ...[
+              const SizedBox(height: 10),
+              const Text(
+                'NOTE: WoL on laptops usually only works from Sleep (S3), not full Power Off (S5).',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10, color: AppColors.comment, fontStyle: FontStyle.italic),
+              ),
+            ],
             const SizedBox(height: 20),
             TextButton(
               onPressed: () {
